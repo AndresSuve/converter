@@ -1,40 +1,21 @@
 import 'package:flutter/material.dart';
 import 'currency_service.dart';
+import 'currency_model.dart';
 
 class ExchangeRatePage extends StatefulWidget {
+  const ExchangeRatePage({super.key});
+
   @override
   _ExchangeRatePageState createState() => _ExchangeRatePageState();
 }
 
 class _ExchangeRatePageState extends State<ExchangeRatePage> {
-  double _exchangeRate = 0.0;
-  String _fromCurrency = 'EUR';
-  String _toCurrency = 'USD';
-  double _amountToConvert = 1.0;
-  ApiService _apiService = ApiService(); // Change here
-
-  void _refreshExchangeRate() async {
-    Map<String, dynamic> responseData = await _apiService.fetchExchangeRates(); // Change here
-    double rate = responseData['rates'][_toCurrency];
-    setState(() {
-      _exchangeRate = rate;
-    });
-  }
-
-  void _switchCurrencies() {
-    setState(() {
-      String temp = _fromCurrency;
-      _fromCurrency = _toCurrency;
-      _toCurrency = temp;
-      _refreshExchangeRate();
-    });
-  }
-
-  void _updateAmountToConvert(String value) {
-    setState(() {
-      _amountToConvert = double.tryParse(value) ?? 1.0;
-    });
-  }
+  List<Currency> _currencies = [];
+  ApiService _apiService = ApiService();
+  double _amount = 1.0;
+  Currency? _sourceCurrency;
+  Currency? _targetCurrency;
+  double _convertedAmount = 0.0;
 
   @override
   void initState() {
@@ -42,97 +23,114 @@ class _ExchangeRatePageState extends State<ExchangeRatePage> {
     _refreshExchangeRate();
   }
 
+  void _refreshExchangeRate() async {
+    try {
+      List<Currency> currencies = await _apiService.fetchExchangeRates();
+      setState(() {
+        _currencies = currencies;
+        _sourceCurrency = null; // Reset source currency selection
+        _targetCurrency = null; // Reset target currency selection
+        _convertedAmount = 0.0; // Reset converted amount
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to fetch exchange rates: $e'),
+        ),
+      );
+    }
+  }
+
+
+  double _calculateConvertedAmount() {
+    if (_sourceCurrency != null && _targetCurrency != null) {
+      return (_amount * _sourceCurrency!.value) / _targetCurrency!.value;
+    }
+    return 0.0;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Currency Converter'),
-        actions: <Widget>[
-          IconButton(
-            icon: Icon(Icons.refresh),
-            onPressed: _refreshExchangeRate,
-          ),
-        ],
+        title: const Text('Currency Converter'),
       ),
-      body: SingleChildScrollView(
+      body: _currencies.isNotEmpty
+          ? SingleChildScrollView(
         child: Padding(
-          padding: EdgeInsets.all(20.0),
+          padding: const EdgeInsets.all(12.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              Text(
-                'Exchange Rate',
-                style: TextStyle(
-                  fontSize: 24.0,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(height: 20.0),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: <Widget>[
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      '1 $_fromCurrency = $_exchangeRate $_toCurrency',
-                      style: TextStyle(fontSize: 20.0),
-                    ),
-                  ),
-                  Expanded(
-                    flex: 1,
-                    child: IconButton(
-                      icon: Icon(Icons.refresh),
-                      onPressed: _refreshExchangeRate,
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 40.0),
-              TextField(
-                keyboardType: TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(
-                  labelText: 'Amount to Convert',
+            children: [
+              DropdownButtonFormField<Currency>(
+                value: _sourceCurrency,
+                onChanged: (value) {
+                  setState(() {
+                    _sourceCurrency = value;
+                    _convertedAmount = _calculateConvertedAmount();
+                  });
+                },
+                items: _currencies
+                    .map((currency) => DropdownMenuItem(
+                  value: currency,
+                  child: Text(currency.code),
+                ))
+                    .toList(),
+                decoration: const InputDecoration(
+                  labelText: 'From',
                   border: OutlineInputBorder(),
                 ),
-                onChanged: _updateAmountToConvert,
               ),
-              SizedBox(height: 20.0),
-              Container(
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _switchCurrencies,
-                  child: Text(
-                    'Switch Currencies',
-                    style: TextStyle(fontSize: 18.0),
-                  ),
+              const SizedBox(height: 24.0),
+              DropdownButtonFormField<Currency>(
+                value: _targetCurrency,
+                onChanged: (value) {
+                  setState(() {
+                    _targetCurrency = value;
+                    _convertedAmount = _calculateConvertedAmount();
+                  });
+                },
+                items: _currencies
+                    .map((currency) => DropdownMenuItem(
+                  value: currency,
+                  child: Text(currency.code),
+                ))
+                    .toList(),
+                decoration: const InputDecoration(
+                  labelText: 'To',
+                  border: OutlineInputBorder(),
                 ),
               ),
-              SizedBox(height: 20.0),
-              Card(
-                elevation: 4,
-                child: Padding(
-                  padding: EdgeInsets.all(20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      Text(
-                        'Converted Amount:',
-                        style: TextStyle(fontSize: 20.0),
-                      ),
-                      SizedBox(height: 10.0),
-                      Text(
-                        '${(_amountToConvert * _exchangeRate).toStringAsFixed(2)} $_toCurrency',
-                        style: TextStyle(fontSize: 24.0, fontWeight: FontWeight.bold),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
+              const SizedBox(height: 24.0),
+              TextFormField(
+                initialValue: _amount.toString(),
+                onChanged: (value) {
+                  setState(() {
+                    _amount = double.tryParse(value) ?? 0.0;
+                    _convertedAmount = _calculateConvertedAmount();
+                  });
+                },
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Amount',
+                  border: OutlineInputBorder(),
                 ),
+              ),
+              const SizedBox(height: 16.0),
+              Text(
+                'Converted Amount: ${_convertedAmount.toStringAsFixed(2)} ${_targetCurrency?.code ?? ''}',
+                style: const TextStyle(fontSize: 24.0, fontWeight: FontWeight.bold),
               ),
             ],
           ),
         ),
+      )
+          : const Center(
+        child: CircularProgressIndicator(),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _refreshExchangeRate,
+        child: const Icon(Icons.refresh),
       ),
     );
   }
