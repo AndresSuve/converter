@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'currency_converter.dart';
+import 'exchange_rate.dart';
 
 void main() {
   runApp(MyApp());
@@ -13,7 +13,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: CurrencyConverter(),
+      home: ExchangeRatePage(),
     );
   }
 }
